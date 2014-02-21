@@ -48,6 +48,37 @@ def insertAndGetId(sql, params=None):
     con.close()
     return id
 
+import threading
+from threading import current_thread
+threadcon = threading.local()
+
+def batchBegin():
+    con = getattr(threadcon, 'con', None)
+    if con is None:
+        threadcon.con = getConn()
+    return threadcon.con 
+    
+def batchUpdate(sql, params=None):
+    con = batchBegin()
+    cur = con.cursor()
+    rowcount = 0
+    if params == None:
+        rowcount = cur.execute(sql)
+    else:
+        rowcount = cur.execute(sql, params)
+    #con.commit()
+    #cur.close()
+    #con.close()
+    return rowcount
+def batchFinish():
+    con = batchBegin()
+    con.commit()
+    con.close()
+    threadcon.con = None
+    
+    
+    
+
 def update(sql, params=None):
     print sql, params
     con = getConn()

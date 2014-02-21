@@ -32,7 +32,8 @@ def login():
     skill = queryAll('select * from skill')
     goods = queryAll('select * from goods')
     cityData = queryAll('select * from cityData')
-    return jsonify(dict(build=res, people=pep, equip=equip, skill=skill, goods=goods, cityData=cityData))
+    villageReward = queryAll('select * from villageReward')
+    return jsonify(dict(build=res, people=pep, equip=equip, skill=skill, goods=goods, cityData=cityData, villageReward=villageReward))
 import time
 @app.route('/synError', methods=['POST'])
 def synError():
@@ -47,6 +48,30 @@ def synError():
 def getParam():
     res = queryAll('select * from param')
     return jsonify(dict(param=res))
+
+@app.route("/signin", methods=['POST'])
+def signin():
+    username = request.form.get("username", None, type=str)
+    user = queryOne("select * from user where username = %s", (username))
+    newUser = False
+    if user == None:
+        uid = insertAndGetId('insert into user (silver, username) values(%s, %s)', (0, username)) 
+        newUser = True
+        print "uid is", uid, len(util.allBuild), len(util.allRoad), len(util.allPeople)
+        for v in util.allBuild:
+            batchUpdate("insert into userBuilding(uid, bid, kind, ax, ay, static) values(%s, %s, %s, %s, %s, %s)", (uid, v['bid'], v['id'], v['px'], v['py'], v['static']))
+        for v in util.allRoad:
+            batchUpdate("insert into userBuilding(uid, bid, kind, ax, ay, static) values(%s, %s, %s, %s, %s, %s)", (uid, v['bid'], v['id'], v['px'], v['py'], v['static']))
+        for k in xrange(0, len(util.allPeople)):
+            v = util.allPeople[k]
+            batchUpdate("insert into userPeople(uid, pid, kind, px, py) values(%s, %s, %s, %s, %s)", (uid, k+1, v['id'], v['px'], v['py']))
+        batchFinish()
+    else:
+        uid = user['uid']
+
+    allB = queryAll('select * from userBuilding where uid = %s', uid)
+    allP = queryAll('select * from userPeople where uid = %s', uid)
+    return jsonify(dict(uid=uid, newUser=newUser, allB=allB, allP=allP))
 
 
 if __name__ == '__main__':
