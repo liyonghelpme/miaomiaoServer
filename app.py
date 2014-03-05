@@ -34,6 +34,7 @@ def login():
     cityData = queryAll('select * from cityData')
     villageReward = queryAll('select * from villageReward')
     return jsonify(dict(build=res, people=pep, equip=equip, skill=skill, goods=goods, cityData=cityData, villageReward=villageReward))
+
 import time
 @app.route('/synError', methods=['POST'])
 def synError():
@@ -55,7 +56,7 @@ def signin():
     user = queryOne("select * from user where username = %s", (username))
     newUser = False
     if user == None:
-        uid = insertAndGetId('insert into user (silver, username, gold, inSell, catData, ownTech) values(%s, %s, %s, %s, %s, %s)', (1000000, username, 1000000, json.dumps({'food':True, 'wood':True, 'stone':True}), json.dumps(None), json.dumps({'sword':0,'spear':0,'magic':0,'bow':0, 'armour':0,'ninja':0}))) 
+        uid = insertAndGetId('insert into user (silver, username, gold, inSell, catData, ownTech, ownBuild) values(%s, %s, %s, %s, %s, %s, %s)', (600, username, 1000000, json.dumps({'food':True, 'wood':True, 'stone':True}), json.dumps(None), json.dumps({'sword':0,'spear':0,'magic':0,'bow':0, 'armour':0,'ninja':0}), json.dumps([1,2,15,4]))) 
         
         batchUpdate('insert into userTableData(uid) values(%s)', uid)
         user = queryOne('select * from user where uid = %s', uid)
@@ -89,6 +90,7 @@ def saveGame():
     uid = request.form.get('uid', None, type=int)
     allBuild = json.loads(request.form.get('allBuild', None, type=str))
     allRoad = json.loads(request.form.get('allRoad', None, type=str))
+    allSellBuild = json.loads(request.form.get('allSellBuild', None, type=str))
     allPeople = json.loads(request.form.get('allPeople', None, type=str))
     dirParams = json.loads(request.form.get('dirParams', None, type=str))
     indirParams = json.loads(request.form.get('indirParams', None, type=str))
@@ -98,6 +100,9 @@ def saveGame():
     for k in allRoad:
         batchUpdate('insert into userBuilding(uid, bid, ax, ay, kind) values(%s, %s, %s, %s, 15) on duplicate key update ax=values(ax), ay=values(ay) ', (uid, k[0], k[1], k[2]))
     
+    for k in allSellBuild:
+        batchUpdate('delete from userBuilding where uid = %s and bid = %s', (uid, k))
+
     for k in allPeople:
         batchUpdate('insert into userPeople(uid, pid, kind, px, py, hid, health, level, weapon, head, body, spe) values(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update kind=values(kind), px=values(px), py=values(py), hid=values(hid), health=values(health), level=values(level), weapon=values(weapon), head=values(head), body=values(body), spe=values(spe)', (uid, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7], k[8], k[9], k[10]))
     
