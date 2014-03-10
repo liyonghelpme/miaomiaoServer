@@ -2,6 +2,16 @@
 import time
 from flaskext import *
 import json
+import redis
+def getServer():
+    rsever = redis.Redis()
+    return rsever
+
+oldDump = json.dumps
+
+def dumpNew(obj):
+    return oldDump(obj, separators=(',', ':'))
+json.dumps = dumpNew 
 
 def doGain(uid, gain):
     for k in gain:

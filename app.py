@@ -7,6 +7,9 @@ import time
 from util import *
 import random
 import util
+from util import getServer
+import config
+import MySQLdb
 
 import logging
 from logging.handlers import TimedRotatingFileHandler
@@ -22,6 +25,8 @@ if __debug__:
     print "Warning running in debug mode!!!!!"
 else:
     print 'product mode!!!'
+#test 
+print json.dumps([1, 2, 3])
 
 @app.route('/login', methods=['POST', 'GET'])
 def login():
@@ -56,9 +61,10 @@ def signin():
     user = queryOne("select * from user where username = %s", (username))
     newUser = False
     if user == None:
-        uid = insertAndGetId('insert into user (silver, username, gold, inSell, catData, ownTech, ownBuild) values(%s, %s, %s, %s, %s, %s, %s)', (600, username, 1000000, json.dumps({'food':True, 'wood':True, 'stone':True}), json.dumps(None), json.dumps({'sword':0,'spear':0,'magic':0,'bow':0, 'armour':0,'ninja':0}), json.dumps([1,2,15,4]))) 
-        
+        uid = insertAndGetId('insert into user (silver, username, gold, inSell, ownTech, ownBuild) values(%s,  %s, %s, %s, %s, %s)', (600, username, 1000000, json.dumps({'food':True, 'wood':True, 'stone':True}), json.dumps({'sword':0,'spear':0,'magic':0,'bow':0, 'armour':0,'ninja':0}), json.dumps([1,2,15,4]))) 
         batchUpdate('insert into userTableData(uid) values(%s)', uid)
+        batchUpdate('insert into userBattleData (uid, catData) values(%s, %s)', (uid, json.dumps(None)))
+
         user = queryOne('select * from user where uid = %s', uid)
         newUser = True
         print "uid is", uid, len(util.allBuild), len(util.allRoad), len(util.allPeople)
@@ -70,8 +76,10 @@ def signin():
             v = util.allPeople[k]
             batchUpdate("insert into userPeople(uid, pid, kind, px, py) values(%s, %s, %s, %s, %s)", (uid, k+1, v['id'], v['px'], v['py']))
 
-        batchUpdate('insert userResearch(uid, researchGoods, ownGoods) values(%s, %s, %s)', (uid, json.dumps([[0, 11]]), json.dumps([[0, 2], [0, 3]])))
-
+        #batchUpdate('insert userResearch(uid, researchGoods, ownGoods) values(%s, %s, %s)', (uid, json.dumps([[0, 11]]), json.dumps([[0, 2], [0, 3]])))
+        rserver = getServer()
+        rserver.set('researchGoods.'+str(uid), json.dumps([[0, 11]]))
+        rserver.set('ownGoods.'+str(uid), json.dumps([[0,2],[0,3]]))
 
         batchFinish()
 
@@ -81,12 +89,25 @@ def signin():
 
     allB = queryAll('select * from userBuilding where uid = %s', uid)
     allP = queryAll('select * from userPeople where uid = %s', uid)
-    researchData = queryOne('select * from userResearch where uid = %s', uid)
+    #researchData = queryOne('select * from userResearch where uid = %s', uid)
+    rserver = getServer()
+    rg = rserver.get('researchGoods.'+str(uid))
+    og = rserver.get('ownGoods.'+str(uid))
+    researchData = {'researchGoods':rg, 'ownGoods':og}
+
     tableData = queryOne('select * from userTableData where uid = %s', uid)
+    tableData.pop('uid')
+    catData = queryOne('select catData from userBattleData where uid = %s', uid)
+    user['catData'] = catData['catData']
+    holdNum = queryAll('select eid, num from userHoldEquip where uid = %s', params=uid, cursorKind=MySQLdb.cursors.Cursor)
+    tableData['holdNum'] = holdNum
     return jsonify(dict(uid=uid, newUser=newUser, allB=allB, allP=allP, researchData=researchData, user=user, tableData=tableData))
 
 @app.route('/saveGame', methods=['POST'])
 def saveGame():
+    if config.DEBUG:
+        print 'saveSize', len(json.dumps(request.form))
+        print json.dumps(request.form)
     uid = request.form.get('uid', None, type=int)
     allBuild = json.loads(request.form.get('allBuild', None, type=str))
     allRoad = json.loads(request.form.get('allRoad', None, type=str))
@@ -94,6 +115,12 @@ def saveGame():
     allPeople = json.loads(request.form.get('allPeople', None, type=str))
     dirParams = json.loads(request.form.get('dirParams', None, type=str))
     indirParams = json.loads(request.form.get('indirParams', None, type=str))
+    holdNum = json.loads(request.form.get('holdNum', None, type=str))
+    
+    #table updateEquipNum
+    for k in holdNum:
+        batchUpdate('insert into userHoldEquip(uid, eid, num) values(%s, %s, %s) on duplicate key set num = values(num) ', (uid, holdNum[k][0], holdNum[k][1]))
+    
 
     for k in allBuild:
         batchUpdate("insert into userBuilding(uid, bid, ax, ay, goodsKind, workNum, lifeStage, dir, kind)values(%s, %s, %s, %s, %s, %s, %s, %s, %s) on duplicate key update ax=values(ax), ay=values(ay), goodsKind=values(goodsKind), workNum=values(workNum), lifeStage=values(lifeStage), dir=values(dir), kind=values(kind) ", (uid, k[0], k[1], k[2], k[3], k[4], k[5], k[6], k[7]))
@@ -111,7 +138,14 @@ def saveGame():
         if k == 'resource':
             batchUpdate('update user set silver = %s , gold = %s where uid = %s', (dirParams[k]['silver'], dirParams[k]['gold'], uid))
         elif k == 'researchData':
-            batchUpdate('update userResearch set researchGoods = %s, ownGoods = %s where uid = %s', (json.dumps(dirParams[k]['researchGoods']), json.dumps(dirParams[k]['ownGoods']), uid))
+            rserver = getServer()
+            rd = dirParams[k]
+            if rd.get('researchGoods'):
+                rserver.set('researchGoods.'+str(uid), json.dumps(rd['researchGoods']))
+            if rd.get('ownGoods'):
+                rserver.set('ownGoods.'+str(uid), json.dumps(rd['ownGoods']))
+
+            #batchUpdate('update userResearch set researchGoods = %s, ownGoods = %s where uid = %s', (json.dumps(dirParams[k]['researchGoods']), json.dumps(dirParams[k]['ownGoods']), uid))
             inR = dirParams[k].get('inResearch', None)
             if inR == None:
                 batchUpdate('update user set inResearch = 0 where uid = %s', (uid))
@@ -122,7 +156,7 @@ def saveGame():
         elif k == 'inSell':
             batchUpdate('update user set inSell = %s where uid = %s', (json.dumps(dirParams[k]), uid))
         elif k == 'catData':
-            batchUpdate('update user set catData = %s where uid = %s', (json.dumps(dirParams[k]), uid))
+            batchUpdate('update userBattleData set catData = %s where uid = %s', (json.dumps(dirParams[k]), uid))
             setcat = True
         elif k == 'date':
             batchUpdate('update user set date = %s where uid = %s', (json.dumps(dirParams[k]), uid))
