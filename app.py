@@ -19,6 +19,7 @@ errorlogger = logging.getLogger("errorLogger")
 errorlogger.addHandler(errorLogHandler)
 errorlogger.setLevel(logging.INFO)
 
+
 app = Flask(__name__)
 app.config.from_object("config")
 if __debug__:
@@ -57,6 +58,12 @@ def getParam():
 
 @app.route("/signin", methods=['POST'])
 def signin():
+    if config.DEBUG:
+        print 'request is'
+        print request.args
+        print request.form
+        print request.data
+
     username = request.form.get("username", None, type=str)
     user = queryOne("select * from user where username = %s", (username))
     newUser = False
@@ -74,7 +81,7 @@ def signin():
             batchUpdate("insert into userBuilding(uid, bid, kind, ax, ay, static) values(%s, %s, %s, %s, %s, %s)", (uid, v['bid'], v['id'], v['px'], v['py'], v['static']))
         for k in xrange(0, len(util.allPeople)):
             v = util.allPeople[k]
-            batchUpdate("insert into userPeople(uid, pid, kind, px, py) values(%s, %s, %s, %s, %s)", (uid, k+1, v['id'], v['px'], v['py']))
+            batchUpdate("insert into userPeople(uid, pid, kind, px, py, health) values(%s, %s, %s, %s, %s, %s)", (uid, k+1, v['id'], v['px'], v['py'], v['health']))
 
         #batchUpdate('insert userResearch(uid, researchGoods, ownGoods) values(%s, %s, %s)', (uid, json.dumps([[0, 11]]), json.dumps([[0, 2], [0, 3]])))
         rserver = getServer()
@@ -108,6 +115,8 @@ def saveGame():
     if config.DEBUG:
         print 'saveSize', len(json.dumps(request.form))
         print json.dumps(request.form)
+        print 'data', request.data
+
     uid = request.form.get('uid', None, type=int)
     allBuild = json.loads(request.form.get('allBuild', None, type=str))
     allRoad = json.loads(request.form.get('allRoad', None, type=str))
@@ -119,7 +128,7 @@ def saveGame():
     
     #table updateEquipNum
     for k in holdNum:
-        batchUpdate('insert into userHoldEquip(uid, eid, num) values(%s, %s, %s) on duplicate key set num = values(num) ', (uid, holdNum[k][0], holdNum[k][1]))
+        batchUpdate('insert into userHoldEquip(uid, eid, num) values(%s, %s, %s) on duplicate key update num = values(num) ', (uid, k[0], k[1]))
     
 
     for k in allBuild:
@@ -175,6 +184,21 @@ def saveGame():
     return jsonify(dict(code=1))
 
 
+#octet-stream 就会返回data 数据 request.data
+'''
+if config.DEBUG:
+    class BackwarsMid(object):
+        def __init__(self, app):
+            self.app = app
+        def __call__(self, environ, start_response):
+            ua = environ.get('HTTP_USER_AGENT')
+            print 'environ', environ
+            #if environ.get('HTTP_CONTENT_TYPE') in (None, '', 'application/x-www-form-urlencoded'):
+            environ['CONTENT_TYPE'] = 'application/octet-stream'
+            soc = environ['wsgi.input']
+            return self.app(environ, start_response)
+    app.wsgi_app = BackwarsMid(app.wsgi_app)
+'''
 
 if __name__ == '__main__':
     app.run(port=9100, host='0.0.0.0')
